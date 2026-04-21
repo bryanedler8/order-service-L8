@@ -1,5 +1,6 @@
 version: "3.7"
 services:
+  # RabbitMQ for message queue
   rabbitmq:
     image: rabbitmq:3.11.17-management-alpine
     container_name: 'rabbitmq'
@@ -8,8 +9,8 @@ services:
       - "RABBITMQ_DEFAULT_USER=username"
       - "RABBITMQ_DEFAULT_PASS=password"
     ports:
-      - 15672:15672
-      - 5672:5672
+      - 15672:15672  # Management UI
+      - 5672:5672    # AMQP protocol
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 30s
@@ -18,7 +19,67 @@ services:
     volumes:
       - ./enabled_plugins:/etc/rabbitmq/enabled_plugins
     networks:
-      - backend_services
+      - bestbuy-network
+
+  # Order Service
+  order-service:
+    build: .
+    container_name: 'order-service'
+    restart: always
+    environment:
+      - PORT=3000
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bestbuy-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Product Service (Rust)
+  product-service:
+    build: ../product-service-L8
+    container_name: 'product-service'
+    restart: always
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=3002
+      - LOG_LEVEL=info
+      - WASM_RULES_ENGINE_ENABLED=false
+    ports:
+      - "3002:3002"
+    networks:
+      - bestbuy-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Makeline Service (Golang - to be added)
+  # makeline-service:
+  #   build: ../makeline-service-L8
+  #   container_name: 'makeline-service'
+  #   restart: always
+  #   environment:
+  #     - PORT=3004
+  #     - RABBITMQ_URL=amqp://rabbitmq:5672
+  #     - PRODUCT_SERVICE_URL=http://product-service:3002
+  #   ports:
+  #     - "3004:3004"
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   networks:
+  #     - bestbuy-network
+
 networks:
-  backend_services:
+  bestbuy-network:
     driver: bridge
