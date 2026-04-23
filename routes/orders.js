@@ -105,6 +105,8 @@ module.exports = async function (fastify, opts) {
     });
   });
   
+
+  
   // Health check
 //   fastify.get('/health', async () => {
 //     return { 
